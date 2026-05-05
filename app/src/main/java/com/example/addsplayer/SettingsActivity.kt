@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
+import android.widget.AutoCompleteTextView
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.textfield.TextInputEditText
 import com.example.addsplayer.BuildConfig
+import android.widget.ArrayAdapter
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -18,6 +20,7 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_LOGIN = "login"
         const val KEY_PASSWORD = "password"
         const val KEY_POS_ID = "pos_id"
+        const val KEY_PLAYLIST_TYPE = "playlist_type"
 
         fun getPrefs(context: Context): SharedPreferences =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -35,6 +38,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var editLogin: TextInputEditText
     private lateinit var editPassword: TextInputEditText
     private lateinit var editPosId: TextInputEditText
+    private lateinit var editPlaylistType: AutoCompleteTextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,6 +65,12 @@ class SettingsActivity : AppCompatActivity() {
         editLogin.setText(prefs.getString(KEY_LOGIN, BuildConfig.DEFAULT_LOGIN))
         editPassword.setText(prefs.getString(KEY_PASSWORD, BuildConfig.DEFAULT_PASSWORD))
         editPosId.setText(prefs.getString(KEY_POS_ID, BuildConfig.DEFAULT_POS_ID))
+
+        val playlistTypes = arrayOf("Основний", "Рекламний", "Спеціальний", "Тестовий")
+        val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, playlistTypes)
+        editPlaylistType.setAdapter(adapter)
+        // Завантажуємо збережене значення
+        editPlaylistType.setText(prefs.getString(KEY_PLAYLIST_TYPE, "Основний"), false)
     }
 
     private fun saveSettings() {
@@ -68,12 +78,13 @@ class SettingsActivity : AppCompatActivity() {
         val login = editLogin.text.toString().trim()
         val password = editPassword.text.toString().trim()
         val posId = editPosId.text.toString().trim()
-
+        val playlistType = editPlaylistType.text.toString().trim()
         getPrefs(this).edit()
             .putString(KEY_SERVER, server)
             .putString(KEY_LOGIN, login)
             .putString(KEY_PASSWORD, password)
             .putString(KEY_POS_ID, posId)
+            .putString(KEY_PLAYLIST_TYPE, playlistType)
             .apply()
 
         Toast.makeText(this, "✅ Налаштування збережено", Toast.LENGTH_SHORT).show()
