@@ -1,4 +1,4 @@
-package com.example.addsplayer
+﻿package com.example.addsplayer
 
 import android.net.Uri
 import android.os.Bundle
@@ -28,11 +28,20 @@ import android.Manifest
 import android.os.Build
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
-
+import android.widget.Toast
 class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "ADSPlayer"
+        private val PLAYLIST_DISPLAY_NAMES = mapOf(
+            "CoffeePoint"  to "Кавопоінт",
+            "CoffeeShop"   to "Кав'ярня",
+            "Gastronomy"   to "Гастроном",
+            "Pizzeria"     to "Піцерія",
+            "Additional1"  to "Додатковий 1",
+            "Additional2"  to "Додатковий 2",
+            "Additional3"  to "Додатковий 3"
+        )
     }
 
     private val requestPermissionsLauncher = registerForActivityResult(
@@ -49,6 +58,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val settingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            lifecycleScope.launch {
+                try {
+                    updateMediaContent()
+                    loadPlaylist()
+                } catch (e: Exception) {
+                    //showError("settings", "Помилка після збереження налаштувань", e)
+                }
+            }
+        }
+    }
+
     private lateinit var player: ExoPlayer
     private lateinit var errorTextView: TextView
 
@@ -59,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     private val login  get() = prefs.getString(SettingsActivity.KEY_LOGIN, BuildConfig.DEFAULT_LOGIN) ?: BuildConfig.DEFAULT_LOGIN
     private val password get() = prefs.getString(SettingsActivity.KEY_PASSWORD, BuildConfig.DEFAULT_PASSWORD) ?: BuildConfig.DEFAULT_PASSWORD
     private val posId  get() = prefs.getString(SettingsActivity.KEY_POS_ID, BuildConfig.DEFAULT_POS_ID) ?: BuildConfig.DEFAULT_POS_ID
+    private val playlistType get() = prefs.getString(SettingsActivity.KEY_PLAYLIST_TYPE, "Кавопоінт") ?: "Кавопоінт"
 
     private val mediaDirectory: File by lazy {
         File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "media").apply { mkdirs() }
@@ -113,7 +138,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(rootLayout)
 
         playerView.setOnLongClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
+            settingsLauncher.launch(Intent(this, SettingsActivity::class.java))
             true
         }
 
@@ -150,7 +175,7 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_MENU,
             KeyEvent.KEYCODE_SETTINGS,
             KeyEvent.KEYCODE_DPAD_UP -> {
-                startActivity(Intent(this, SettingsActivity::class.java))
+                settingsLauncher.launch(Intent(this, SettingsActivity::class.java))
                 true
             }
             else -> super.onKeyDown(keyCode, event)
@@ -160,10 +185,11 @@ class MainActivity : AppCompatActivity() {
     // ─── media update ────────────────────────────────────────────────────────
 
     private suspend fun updateMediaContent() {
-        Log.d(TAG, "updateMediaContent: старт")
+        Log.d(TAG, "updateMediaContent: старт (PlaylistType: $playlistType)")
         try {
             updateMediaCatalog()
             updateMediaFiles()
+            cleanupObsoleteFiles()
             clearError()
             Log.d(TAG, "updateMediaContent: завершено успішно")
         } catch (e: Exception) {
@@ -179,6 +205,7 @@ class MainActivity : AppCompatActivity() {
                     .url(server)
                     .addHeader("Authorization", SettingsActivity.createBasicAuth(login, password))
                     .addHeader("POSID", posId)
+                    .addHeader("PlaylistType", playlistType)
                     .build()
 
                 val response = client.newCall(request).execute()
@@ -207,6 +234,18 @@ class MainActivity : AppCompatActivity() {
                         Log.e(TAG, "updateMediaCatalog: помилка парсингу $i", e)
                     }
                 }
+
+                if (mediaList.isEmpty()) {
+                    val displayName = PLAYLIST_DISPLAY_NAMES[playlistType] ?: playlistType
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "⚠️ Плейлист \"$displayName\" - відсутні відео, відображаються попередні відео",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+
             } catch (e: Exception) {
                 throw e
             }
@@ -232,6 +271,7 @@ class MainActivity : AppCompatActivity() {
                             .url(fileUrl)
                             .addHeader("Authorization", SettingsActivity.createBasicAuth(login, password))
                             .addHeader("POSID", posId)
+                            .addHeader("playlistType", playlistType)       // ← НОВИЙ ХЕДЕР
                             .build()
 
                         val response = client.newCall(request).execute()
@@ -264,6 +304,28 @@ class MainActivity : AppCompatActivity() {
                     header[7] == 0x70.toByte()
         } catch (e: Exception) {
             false
+        }
+    }
+
+    private fun cleanupObsoleteFiles() {
+        val currentCodes = mediaList
+            .filter { !it.deleted && it.playing }
+            .map { it.code }
+            .toSet()
+
+        val filesToDelete = mediaDirectory.listFiles()?.filter { file ->
+            file.extension == "mp4" && file.nameWithoutExtension !in currentCodes
+        } ?: emptyList()
+
+        if (filesToDelete.isNotEmpty()) {
+            Log.d(TAG, "Видаляємо ${filesToDelete.size} застарілих файлів")
+            filesToDelete.forEach { file ->
+                if (file.delete()) {
+                    Log.d(TAG, "Видалено: ${file.name}")
+                } else {
+                    Log.w(TAG, "Не вдалося видалити: ${file.name}")
+                }
+            }
         }
     }
 

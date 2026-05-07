@@ -177,7 +177,8 @@
                     android:inputType="none"
                     android:padding="10dp"
                     android:textSize="14sp"
-                    android:dropDownHeight="wrap_content" />
+                    android:dropDownHeight="wrap_content"
+                    android:popupBackground="@android:color/white"/>
             </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
 

@@ -4,13 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
+import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.textfield.TextInputEditText
 import com.example.addsplayer.BuildConfig
-import android.widget.ArrayAdapter
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -32,6 +32,7 @@ class SettingsActivity : AppCompatActivity() {
             val encoded = android.util.Base64.encodeToString(credentials.toByteArray(), android.util.Base64.NO_WRAP)
             return "Basic $encoded"
         }
+
     }
 
     private lateinit var editServer: TextInputEditText
@@ -45,10 +46,12 @@ class SettingsActivity : AppCompatActivity() {
         supportActionBar?.hide()
         setContentView(R.layout.activity_settings)
 
+        // Ініціалізація всіх views
         editServer = findViewById(R.id.edit_server_url)
         editLogin = findViewById(R.id.edit_login)
         editPassword = findViewById(R.id.edit_password)
         editPosId = findViewById(R.id.edit_pos_id)
+        editPlaylistType = findViewById(R.id.edit_playlist_type)   // ← було пропущено
 
         loadSettings()
 
@@ -60,17 +63,37 @@ class SettingsActivity : AppCompatActivity() {
     private fun loadSettings() {
         val prefs = getPrefs(this)
 
-        // Використовуємо BuildConfig замість пошуку файлів по дисках
         editServer.setText(prefs.getString(KEY_SERVER, BuildConfig.DEFAULT_SERVER))
         editLogin.setText(prefs.getString(KEY_LOGIN, BuildConfig.DEFAULT_LOGIN))
         editPassword.setText(prefs.getString(KEY_PASSWORD, BuildConfig.DEFAULT_PASSWORD))
         editPosId.setText(prefs.getString(KEY_POS_ID, BuildConfig.DEFAULT_POS_ID))
 
-        val playlistTypes = arrayOf("Основний", "Рекламний", "Спеціальний", "Тестовий")
+        // === Типи плейлистів ===
+        val playlistTypes = arrayOf(
+            "Кавопоінт", "Кав'ярня", "Гастроном", "Піцерія",
+            "Додатковий 1", "Додатковий 2", "Додатковий 3"
+        )
+
+        val playlistValues = arrayOf(
+            "CoffeePoint", "CoffeeShop", "Gastronome", "Pizzeria",
+            "Additional1", "Additional2", "Additional3"
+        )
+
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, playlistTypes)
         editPlaylistType.setAdapter(adapter)
+
         // Завантажуємо збережене значення
-        editPlaylistType.setText(prefs.getString(KEY_PLAYLIST_TYPE, "Основний"), false)
+        val savedValue = prefs.getString(KEY_PLAYLIST_TYPE, "CoffeePoint") ?: "CoffeePoint"
+        val index = playlistValues.indexOf(savedValue)
+
+        if (index >= 0) {
+            editPlaylistType.setText(playlistTypes[index], false)
+        } else {
+            editPlaylistType.setText("Кавопоінт", false)
+        }
+
+        // Зберігаємо масив значень для подальшого використання
+        editPlaylistType.tag = playlistValues
     }
 
     private fun saveSettings() {
@@ -78,16 +101,25 @@ class SettingsActivity : AppCompatActivity() {
         val login = editLogin.text.toString().trim()
         val password = editPassword.text.toString().trim()
         val posId = editPosId.text.toString().trim()
-        val playlistType = editPlaylistType.text.toString().trim()
+
+        val playlistTypes = arrayOf("Кавопоінт", "Кав'ярня", "Гастроном", "Піцерія", "Додатковий 1", "Додатковий 2", "Додатковий 3")
+        val playlistValues = arrayOf("CoffeePoint", "CoffeeShop", "Gastronome", "Pizzeria", "Additional1", "Additional2", "Additional3")
+
+        val selectedText = editPlaylistType.text.toString().trim()
+        val index = playlistTypes.indexOf(selectedText)
+        val playlistTypeValue = if (index >= 0) playlistValues[index] else "CoffeePoint"
+
         getPrefs(this).edit()
             .putString(KEY_SERVER, server)
             .putString(KEY_LOGIN, login)
             .putString(KEY_PASSWORD, password)
             .putString(KEY_POS_ID, posId)
-            .putString(KEY_PLAYLIST_TYPE, playlistType)
+            .putString(KEY_PLAYLIST_TYPE, playlistTypeValue)   // зберігаємо латинський код
             .apply()
 
         Toast.makeText(this, "✅ Налаштування збережено", Toast.LENGTH_SHORT).show()
+        setResult(RESULT_OK)
         finish()
     }
 }
+
