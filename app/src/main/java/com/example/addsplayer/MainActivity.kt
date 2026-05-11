@@ -254,42 +254,67 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun updateMediaFiles() {
         Log.d(TAG, "updateMediaFiles: обробка ${mediaList.size} файлів")
+
         withContext(Dispatchers.IO) {
+            var downloaded = 0
+            var deleted = 0
+
             for (media in mediaList) {
                 val file = File(mediaDirectory, "${media.code}.mp4")
 
+                // Видаляємо, якщо потрібно
                 if (file.exists() && (media.deleted || !media.playing)) {
                     file.delete()
+                    deleted++
+                    Log.d(TAG, "Видалено: ${media.code}.mp4")
                     continue
                 }
 
-                if (!file.exists() && !media.deleted && media.playing) {
-                    val fileUrl = server + media.code
+                // Завантажуємо/оновлюємо файл
+                if (!media.deleted && media.playing) {
+                    val needsDownload = !file.exists() || file.length() == 0L
 
-                    try {
-                        val request = Request.Builder()
-                            .url(fileUrl)
-                            .addHeader("Authorization", SettingsActivity.createBasicAuth(login, password))
-                            .addHeader("POSID", posId)
-                            .addHeader("playlistType", playlistType)       // ← НОВИЙ ХЕДЕР
-                            .build()
+                    if (needsDownload) {
+                        val fileUrl = "$server${media.code}"
 
-                        val response = client.newCall(request).execute()
-                        if (!response.isSuccessful) continue
+                        try {
+                            Log.d(TAG, "📥 Завантаження: ${media.code}.mp4")
 
-                        val body = response.body ?: continue
+                            val request = Request.Builder()
+                                .url(fileUrl)
+                                .addHeader("Authorization", SettingsActivity.createBasicAuth(login, password))
+                                .addHeader("POSID", posId)
+                                .addHeader("PlaylistType", playlistType)
+                                .build()
 
-                        val tempFile = File(mediaDirectory, "${media.code}.tmp")
-                        FileOutputStream(tempFile).use { output ->
-                            body.byteStream().use { input -> input.copyTo(output) }
+                            val response = client.newCall(request).execute()
+
+                            if (response.isSuccessful) {
+                                val tempFile = File(mediaDirectory, "${media.code}.tmp")
+
+                                FileOutputStream(tempFile).use { output ->
+                                    response.body?.byteStream()?.use { input ->
+                                        input.copyTo(output)
+                                    }
+                                }
+
+                                if (tempFile.length() > 100_000) {  // мінімальна перевірка розміру
+                                    tempFile.renameTo(file)
+                                    downloaded++
+                                    Log.d(TAG, "✅ Завантажено: ${media.code}.mp4 (${file.length()} байт)")
+                                } else {
+                                    tempFile.delete()
+                                    Log.e(TAG, "Файл ${media.code} завантажився порожнім")
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Помилка завантаження ${media.code}", e)
                         }
-
-                        tempFile.renameTo(file)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Помилка завантаження ${media.code}", e)
                     }
                 }
             }
+
+            Log.d(TAG, "updateMediaFiles завершено. Завантажено: $downloaded, Видалено: $deleted")
         }
     }
 
